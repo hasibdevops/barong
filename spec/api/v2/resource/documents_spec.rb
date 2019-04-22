@@ -128,16 +128,16 @@ describe 'Documents API test' do
       expect_body.to eq(errors: ['resource.document.missing_doc_type', 'resource.document.empty_doc_type'])
       expect(response.status).to eq(422)
 
-      post '/api/v2/resource/documents', params: params.except(:doc_expire), headers: auth_header
-      expect_body.to eq(errors: ["resource.document.missing_doc_expire", "resource.document.empty_doc_expire"])
-      expect(response.status).to eq(422)
-
       post '/api/v2/resource/documents', params: params.except(:doc_number), headers: auth_header
       expect_body.to eq(errors: ["resource.document.missing_doc_number", "resource.document.empty_doc_number"])
       expect(response.status).to eq(422)
 
       post '/api/v2/resource/documents', params: params.except(:upload), headers: auth_header
       expect_body.to eq(errors: ["resource.document.missing_upload"])
+      expect(response.status).to eq(422)
+
+      post '/api/v2/resource/documents', params: params.except(:doc_expire).merge(doc_expire: 'blah'), headers: auth_header
+      expect_body.to eq(errors: ["resource.documents.expire_not_a_date"])
       expect(response.status).to eq(422)
 
       params0 = params
