@@ -16,28 +16,30 @@ module Barong
 
     # init base request info, fetch black and white lists
     def initialize(request, path)
-      @request = request
-      session[:init] = true
-      @path = path
-      @rules = lists['rules']
+      # @request = request
+      # session[:init] = true
+      # @path = path
+      # @rules = lists['rules']
     end
 
     # main: switch between cookie and api key logic, return bearer token
     def auth
-      auth_type = 'cookie'
-      auth_type = 'api_key' if api_key_headers?
-      auth_owner = method("#{auth_type}_owner").call
-      'Bearer ' + codec.encode(auth_owner.as_payload) # encoded user info
+      # auth_type = 'cookie'
+      # auth_type = 'api_key' if api_key_headers?
+      # auth_owner = method("#{auth_type}_owner").call
+      # 'Bearer ' + codec.encode(auth_owner.as_payload) # encoded user info
     end
 
     # cookies validations
     def cookie_owner
       error!({ errors: ['authz.invalid_session'] }, 401) unless session[:uid]
 
-      user = User.find_by!(uid: session[:uid])
-      error!({ errors: ['authz.user_not_active'] }, 401) unless user.active?
+      # user = User.find_by!(uid: session[:uid])
+      # error!({ errors: ['authz.user_not_active'] }, 401) unless user.active?
 
-      user # returns user(whose session is inside cookie)
+      # validate_permissions!(user)
+
+     # returns user(whose session is inside cookie)
     end
 
     # api key validations
@@ -50,20 +52,35 @@ module Barong
       error!({ errors: ['authz.apikey_not_active'] }, 401) unless current_api_key.active?
 
       user = User.find_by_id(current_api_key.user_id)
-
       validate_user!(user)
+
+      validate_permissions!(user)
+
       user # returns user(api key creator)
     rescue ActiveRecord::RecordNotFound
       error!({ errors: ['authz.unexistent_apikey'] }, 401)
     end
 
+    def validate_permissions!(user)
+      # Caches Permission.all result to optimize
+      permissions = Rails.cache.read('permissions')
+      if permissions.nil?
+        permissions = Permission.all.to_ary
+        Rails.cache.write('permissions', permissions, expires_in: 5.minutes)
+      end
+
+      permissions.select! { |a| a.role == user.role && a.req_method == @request.env['REQUEST_METHOD'] && @path.starts_with?(a.path) }
+
+      error!({ errors: ['authz.invalid_permission'] }, 401) if permissions.blank? || permissions.min_by(&:priority).action == 'DROP'
+    end
+
     # black/white list validation. takes ['block', 'pass'] as a parameter
     def restricted?(type)
-      return false if @rules[type].nil? # if no authz rules provided
+      # return false if @rules[type].nil? # if no authz rules provided
 
-      @rules[type].each do |t|
-        return true if @path.starts_with?(t) # if request path is inside the rules list
-      end
+      # @rules[type].each do |t|
+      #   return true if @path.starts_with?(t) # if request path is inside the rules list
+      # end
       false # default
     end
 
@@ -76,13 +93,13 @@ module Barong
 
     # fetch authz rules from yml
     def lists
-      YAML.safe_load(
-        ERB.new(
-          File.read(
-            ENV.fetch('AUTHZ_RULES_FILE', Rails.root.join('config', 'authz_rules.yml'))
-          )
-        ).result
-      )
+      # YAML.safe_load(
+      #   ERB.new(
+      #     File.read(
+      #       ENV.fetch('AUTHZ_RULES_FILE', Rails.root.join('config', 'authz_rules.yml'))
+      #     )
+      #   ).result
+      # )
     end
 
     # checks if api key headers are present in request
